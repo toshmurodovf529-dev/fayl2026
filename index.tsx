@@ -1,0 +1,538 @@
+import React, { useState, useEffect, useRef, Suspense } from 'react';
+import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
+import * as THREE from 'three';
+import { 
+  HeartPulse, Stethoscope, Activity, Brain, Bone, Baby, 
+  Menu, X, Phone, MapPin, Clock, ChevronRight, Moon, Sun, Globe,
+  CheckCircle2, AlertCircle, PlayCircle
+} from 'lucide-react';
+
+const DICTIONARY = {
+  uz: {
+    nav: { services: "Xizmatlar", doctors: "Shifokorlar", about: "Biz haqimizda", contact: "Aloqa", book: "Qabulga yozilish" },
+    hero: { title: "Sog'lig'ingiz – bizning asosiy boyligimiz", subtitle: "Ilg'or texnologiyalar va xalqaro tajribaga ega mutaxassislar yordamida premium darajadagi tibbiy xizmatlar.", cta1: "Qabulga yozilish", cta2: "Virtual tur" },
+    stats: { patients: "Bemorlar", exp: "Yillik tajriba", docs: "Mutaxassislar" },
+    services: { title: "Bizning Yo'nalishlar", subtitle: "Eng zamonaviy uskunalar bilan ta'minlangan bo'limlarimiz" },
+    form: { title: "Onlayn Qabul", step1: "Yo'nalishni tanlang", step2: "Shifokorni tanlang", step3: "Sana va Vaqt", step4: "Ma'lumotlar", next: "Keyingisi", back: "Orqaga", submit: "Tasdiqlash", success: "So'rovingiz qabul qilindi!" }
+  },
+  ru: {
+    nav: { services: "Услуги", doctors: "Врачи", about: "О нас", contact: "Контакты", book: "Записаться" },
+    hero: { title: "Ваше здоровье – наше главное богатство", subtitle: "Медицинские услуги премиум-класса с использованием передовых технологий и специалистов с международным опытом.", cta1: "Записаться на прием", cta2: "Виртуальный тур" },
+    stats: { patients: "Пациентов", exp: "Лет опыта", docs: "Специалистов" },
+    services: { title: "Наши Направления", subtitle: "Отделения, оснащенные самым современным оборудованием" },
+    form: { title: "Онлайн Запись", step1: "Выберите направление", step2: "Выберите врача", step3: "Дата и время", step4: "Данные", next: "Далее", back: "Назад", submit: "Подтвердить", success: "Ваша заявка принята!" }
+  },
+  en: {
+    nav: { services: "Services", doctors: "Doctors", about: "About Us", contact: "Contact", book: "Book Appointment" },
+    hero: { title: "Your Health is Our Greatest Wealth", subtitle: "Premium medical services using advanced technologies and specialists with international experience.", cta1: "Book Appointment", cta2: "Virtual Tour" },
+    stats: { patients: "Patients", exp: "Years Experience", docs: "Specialists" },
+    services: { title: "Our Departments", subtitle: "Departments equipped with the most modern facilities" },
+    form: { title: "Online Booking", step1: "Select Department", step2: "Select Doctor", step3: "Date & Time", step4: "Details", next: "Next", back: "Back", submit: "Confirm", success: "Request Accepted!" }
+  }
+};
+
+const ThreeScene = () => {
+  const mountRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!mountRef.current) return;
+
+    // Scene setup
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, mountRef.current.clientWidth / mountRef.current.clientHeight, 0.1, 100);
+    camera.position.z = 8;
+
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    mountRef.current.appendChild(renderer.domElement);
+
+    // Lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+    dirLight.position.set(10, 10, 5);
+    scene.add(dirLight);
+    const pointLight = new THREE.PointLight(0x4CC9A6, 2, 20);
+    pointLight.position.set(-5, -5, -5);
+    scene.add(pointLight);
+
+    // Group for rotation
+    const group = new THREE.Group();
+    scene.add(group);
+
+    // Central Cross (Glass-like material)
+    const crossMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x4CC9A6,
+      metalness: 0.1,
+      roughness: 0.1,
+      transparent: true,
+      opacity: 0.8,
+      transmission: 0.9,
+      ior: 1.5,
+    });
+
+    const vBox = new THREE.Mesh(new THREE.BoxGeometry(1, 3, 0.5), crossMaterial);
+    const hBox = new THREE.Mesh(new THREE.BoxGeometry(3, 1, 0.5), crossMaterial);
+    group.add(vBox);
+    group.add(hBox);
+
+    // Floating Pills
+    const pillGeo = new THREE.CapsuleGeometry(0.2, 0.6, 16, 16);
+    const pills: { mesh: THREE.Mesh, speed: number, offset: number }[] = [];
+    
+    for (let i = 0; i < 15; i++) {
+      const pillMat = new THREE.MeshStandardMaterial({
+        color: i % 2 === 0 ? 0x0E7C86 : 0xffffff,
+        roughness: 0.2,
+        metalness: 0.1
+      });
+      const pill = new THREE.Mesh(pillGeo, pillMat);
+      
+      pill.position.set(
+        (Math.random() - 0.5) * 8,
+        (Math.random() - 0.5) * 8,
+        (Math.random() - 0.5) * 4 - 1
+      );
+      pill.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+      
+      group.add(pill);
+      pills.push({
+        mesh: pill,
+        speed: 1 + Math.random(),
+        offset: Math.random() * Math.PI * 2
+      });
+    }
+
+    // Mouse Interaction
+    let targetX = 0;
+    let targetY = 0;
+    const handleMouseMove = (event: MouseEvent) => {
+      targetX = (event.clientX / window.innerWidth) * 2 - 1;
+      targetY = -(event.clientY / window.innerHeight) * 2 + 1;
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+
+    // Animation Loop
+    let animationFrameId: number;
+    const clock = new THREE.Clock();
+
+    const animate = () => {
+      animationFrameId = requestAnimationFrame(animate);
+      const elapsedTime = clock.getElapsedTime();
+
+      // Smoothly interpolate group rotation towards mouse position
+      group.rotation.x += (targetY * 0.5 - group.rotation.x) * 0.05;
+      group.rotation.y += (elapsedTime * 0.1 + targetX * 0.5 - group.rotation.y) * 0.05;
+      group.position.y = Math.sin(elapsedTime * 0.5) * 0.1;
+
+      // Animate individual pills
+      pills.forEach((pill) => {
+        pill.mesh.rotation.x += 0.01 * pill.speed;
+        pill.mesh.rotation.y += 0.015 * pill.speed;
+        pill.mesh.position.y += Math.sin(elapsedTime * pill.speed + pill.offset) * 0.005;
+      });
+
+      renderer.render(scene, camera);
+    };
+
+    animate();
+
+    // Handle Resize
+    const handleResize = () => {
+      if (!mountRef.current) return;
+      camera.aspect = mountRef.current.clientWidth / mountRef.current.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
+    };
+    window.addEventListener('resize', handleResize);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(animationFrameId);
+      if (mountRef.current && renderer.domElement) {
+        mountRef.current.removeChild(renderer.domElement);
+      }
+      crossMaterial.dispose();
+      pillGeo.dispose();
+      renderer.dispose();
+    };
+  }, []);
+
+  return <div ref={mountRef} className="w-full h-full" />;
+};
+
+const TiltCard = ({ children, className }: { children: React.ReactNode, className?: string }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [rotateX, setRotateX] = useState(0);
+  const [rotateY, setRotateY] = useState(0);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const width = rect.width;
+    const height = rect.height;
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    const rotateYVal = ((mouseX / width) - 0.5) * 20; // Max rotation 20deg
+    const rotateXVal = ((mouseY / height) - 0.5) * -20;
+    
+    setRotateX(rotateXVal);
+    setRotateY(rotateYVal);
+  };
+
+  const handleMouseLeave = () => {
+    setRotateX(0);
+    setRotateY(0);
+  };
+
+  return (
+    <motion.div
+      ref={ref}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      animate={{ rotateX, rotateY }}
+      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+      style={{ perspective: 1000 }}
+      className={`transform-gpu ${className}`}
+    >
+      {children}
+    </motion.div>
+  );
+};
+
+const AppointmentForm = ({ t, isDark }: { t: any, isDark: boolean }) => {
+  const [step, setStep] = useState(1);
+  const [formData, setFormData] = useState({ dept: '', doc: '', date: '', phone: '', name: '' });
+  const [submitted, setSubmitted] = useState(false);
+
+  const depts = ["Kardiologiya", "Nevrologiya", "Stomatologiya", "Pediatriya"];
+  const docs = ["Dr. Alisherov (Kardiolog)", "Dr. Karimova (Nevrolog)", "Dr. Oripov (Stomatolog)"];
+
+  const handleNext = () => setStep(s => Math.min(s + 1, 4));
+  const handleBack = () => setStep(s => Math.max(s - 1, 1));
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitted(true);
+    // Here you would typically send data to Telegram bot or backend API
+    setTimeout(() => { setSubmitted(false); setStep(1); setFormData({ dept: '', doc: '', date: '', phone: '', name: '' }); }, 3000);
+  };
+
+  if (submitted) {
+    return (
+      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center justify-center p-12 text-center">
+        <CheckCircle2 className="w-20 h-20 text-[#4CC9A6] mb-4" />
+        <h3 className="text-2xl font-bold">{t.form.success}</h3>
+        <p className="opacity-70 mt-2">Biz tez orada siz bilan bog'lanamiz.</p>
+      </motion.div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="relative w-full max-w-2xl mx-auto backdrop-blur-xl bg-white/5 border border-white/10 p-8 rounded-3xl shadow-2xl overflow-hidden">
+      {/* Progress Bar */}
+      <div className="absolute top-0 left-0 h-1 bg-gray-200/20 w-full">
+        <motion.div className="h-full bg-gradient-to-r from-[#0E7C86] to-[#4CC9A6]" initial={{ width: '25%' }} animate={{ width: `${(step / 4) * 100}%` }} transition={{ duration: 0.3 }} />
+      </div>
+
+      <h3 className="text-2xl font-bold mb-6 text-center">{t.form.title}</h3>
+      
+      <AnimatePresence mode="wait">
+        {step === 1 && (
+          <motion.div key="step1" initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -50, opacity: 0 }} className="space-y-4">
+            <label className="block text-sm font-medium opacity-80">{t.form.step1}</label>
+            <div className="grid grid-cols-2 gap-3">
+              {depts.map(d => (
+                <button type="button" key={d} onClick={() => { setFormData({ ...formData, dept: d }); handleNext(); }} className={`p-4 rounded-xl border transition-all ${formData.dept === d ? 'border-[#4CC9A6] bg-[#4CC9A6]/10' : 'border-gray-500/20 hover:border-[#0E7C86]/50'}`}>
+                  {d}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {step === 2 && (
+          <motion.div key="step2" initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -50, opacity: 0 }} className="space-y-4">
+            <label className="block text-sm font-medium opacity-80">{t.form.step2}</label>
+            <div className="grid grid-cols-1 gap-3">
+              {docs.map(d => (
+                <button type="button" key={d} onClick={() => { setFormData({ ...formData, doc: d }); handleNext(); }} className={`p-4 rounded-xl border text-left transition-all ${formData.doc === d ? 'border-[#4CC9A6] bg-[#4CC9A6]/10' : 'border-gray-500/20 hover:border-[#0E7C86]/50'}`}>
+                  {d}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {step === 3 && (
+          <motion.div key="step3" initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -50, opacity: 0 }} className="space-y-4">
+             <label className="block text-sm font-medium opacity-80">{t.form.step3}</label>
+             <input type="datetime-local" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className={`w-full p-4 rounded-xl border border-gray-500/20 bg-transparent focus:border-[#4CC9A6] outline-none ${isDark ? '[color-scheme:dark]' : ''}`} required />
+             <div className="flex justify-end mt-4">
+               <button type="button" onClick={handleNext} disabled={!formData.date} className="px-6 py-3 bg-[#0E7C86] text-white rounded-xl disabled:opacity-50 hover:bg-[#0b626a] transition">{t.form.next}</button>
+             </div>
+          </motion.div>
+        )}
+
+        {step === 4 && (
+          <motion.div key="step4" initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -50, opacity: 0 }} className="space-y-4">
+             <label className="block text-sm font-medium opacity-80">{t.form.step4}</label>
+             <input type="text" placeholder="Ism Familiya" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full p-4 rounded-xl border border-gray-500/20 bg-transparent focus:border-[#4CC9A6] outline-none" required />
+             <input type="tel" placeholder="+998 __ ___ __ __" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full p-4 rounded-xl border border-gray-500/20 bg-transparent focus:border-[#4CC9A6] outline-none mt-4" required />
+             <div className="flex justify-between mt-6">
+               <button type="button" onClick={handleBack} className="px-6 py-3 border border-gray-500/20 rounded-xl hover:bg-gray-500/10 transition">{t.form.back}</button>
+               <button type="submit" className="px-8 py-3 bg-gradient-to-r from-[#0E7C86] to-[#4CC9A6] text-white rounded-xl shadow-lg shadow-[#4CC9A6]/30 hover:scale-105 transition-transform">{t.form.submit}</button>
+             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </form>
+  );
+};
+
+export default function App() {
+  const [lang, setLang] = useState<'uz' | 'ru' | 'en'>('uz');
+  const [isDark, setIsDark] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  
+  const t = DICTIONARY[lang];
+  const { scrollYProgress } = useScroll();
+  const yBg = useTransform(scrollYProgress, [0, 1], ['0%', '50%']);
+
+  // Toggle Dark Mode class on body for Tailwind
+  useEffect(() => {
+    if (isDark) { document.documentElement.classList.add('dark'); } 
+    else { document.documentElement.classList.remove('dark'); }
+  }, [isDark]);
+
+  return (
+    <div className={`min-h-screen font-['Inter'] transition-colors duration-500 ${isDark ? 'bg-gray-950 text-gray-100' : 'bg-[#f8fcfb] text-gray-900'}`}>
+      
+      {/* Navbar - Sticky Glassmorphism */}
+      <header className="fixed top-0 w-full z-50 backdrop-blur-md bg-white/60 dark:bg-gray-950/60 border-b border-gray-200 dark:border-gray-800 transition-colors">
+        <div className="container mx-auto px-4 md:px-8 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-2 cursor-pointer">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0E7C86] to-[#4CC9A6] flex items-center justify-center text-white shadow-lg">
+              <Activity size={24} />
+            </div>
+            <span className="text-2xl font-bold font-['Plus_Jakarta_Sans'] tracking-tight">Med<span className="text-[#0E7C86] dark:text-[#4CC9A6]">Clinic</span></span>
+          </div>
+
+          <nav className="hidden md:flex items-center gap-8 font-medium">
+            {['services', 'doctors', 'about', 'contact'].map((item) => (
+              <a key={item} href={`#${item}`} className="hover:text-[#0E7C86] dark:hover:text-[#4CC9A6] transition-colors relative group">
+                {t.nav[item as keyof typeof t.nav]}
+                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-[#4CC9A6] transition-all group-hover:w-full"></span>
+              </a>
+            ))}
+          </nav>
+
+          <div className="hidden md:flex items-center gap-4">
+            <div className="flex bg-gray-100 dark:bg-gray-900 p-1 rounded-full">
+              {['uz', 'ru', 'en'].map(l => (
+                <button key={l} onClick={() => setLang(l as any)} className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${lang === l ? 'bg-white dark:bg-gray-800 shadow-sm' : 'opacity-60'}`}>
+                  {l.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setIsDark(!isDark)} className="p-2 rounded-full bg-gray-100 dark:bg-gray-900 hover:scale-110 transition-transform">
+              {isDark ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+            <button className="px-6 py-2.5 rounded-full bg-[#0E7C86] text-white font-medium hover:bg-[#0b626a] shadow-lg shadow-[#0E7C86]/30 hover:shadow-xl hover:-translate-y-0.5 transition-all">
+              {t.nav.book}
+            </button>
+          </div>
+
+          {/* Mobile Menu Toggle */}
+          <button className="md:hidden p-2" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+            {isMenuOpen ? <X size={28} /> : <Menu size={28} />}
+          </button>
+        </div>
+
+        {/* Mobile Menu Dropdown */}
+        <AnimatePresence>
+          {isMenuOpen && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="md:hidden bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800 overflow-hidden">
+              <div className="p-4 flex flex-col gap-4">
+                {['services', 'doctors', 'about', 'contact'].map((item) => (
+                  <a key={item} href={`#${item}`} onClick={() => setIsMenuOpen(false)} className="text-lg font-medium p-2 hover:bg-gray-50 dark:hover:bg-gray-900 rounded-lg">
+                    {t.nav[item as keyof typeof t.nav]}
+                  </a>
+                ))}
+                <div className="flex items-center justify-between p-2">
+                  <div className="flex gap-2">
+                    {['uz', 'ru', 'en'].map(l => (
+                      <button key={l} onClick={() => setLang(l as any)} className={`px-3 py-1 rounded-md text-sm font-medium border ${lang === l ? 'border-[#0E7C86] text-[#0E7C86]' : 'border-gray-200 dark:border-gray-800'}`}>
+                        {l.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => setIsDark(!isDark)} className="p-2 border border-gray-200 dark:border-gray-800 rounded-md">
+                    {isDark ? <Sun size={20} /> : <Moon size={20} />}
+                  </button>
+                </div>
+                <button className="w-full py-3 rounded-xl bg-[#0E7C86] text-white font-medium mt-2">
+                  {t.nav.book}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </header>
+
+      <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden min-h-screen flex items-center">
+        {/* Abstract Background Shapes */}
+        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-gradient-to-br from-[#4CC9A6]/20 to-[#0E7C86]/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3"></div>
+        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-[#0E7C86]/10 rounded-full blur-[100px] translate-y-1/3 -translate-x-1/3"></div>
+
+        <div className="container mx-auto px-4 md:px-8 grid md:grid-cols-2 gap-12 items-center relative z-10">
+          <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }} className="space-y-8">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#4CC9A6]/10 text-[#0E7C86] dark:text-[#4CC9A6] font-medium text-sm border border-[#4CC9A6]/20">
+              <span className="w-2 h-2 rounded-full bg-[#4CC9A6] animate-pulse"></span>
+              Premium Medical Center
+            </div>
+            <h1 className="text-5xl md:text-7xl font-bold font-['Plus_Jakarta_Sans'] leading-[1.1] text-gray-900 dark:text-white">
+              {t.hero.title.split('–')[0]} <br/>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#0E7C86] to-[#4CC9A6]">
+                 – {t.hero.title.split('–')[1]}
+              </span>
+            </h1>
+            <p className="text-lg md:text-xl text-gray-600 dark:text-gray-400 max-w-lg leading-relaxed">
+              {t.hero.subtitle}
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-4 pt-4">
+              <button className="px-8 py-4 rounded-full bg-gradient-to-r from-[#0E7C86] to-[#4CC9A6] text-white font-semibold text-lg shadow-lg shadow-[#4CC9A6]/30 hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-2 group">
+                {t.hero.cta1}
+                <ChevronRight className="group-hover:translate-x-1 transition-transform" />
+              </button>
+              <button className="px-8 py-4 rounded-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white font-semibold text-lg hover:border-[#0E7C86] transition-all flex items-center justify-center gap-2 group">
+                <PlayCircle className="text-[#0E7C86]" />
+                {t.hero.cta2}
+              </button>
+            </div>
+
+            {/* Trust Indicators */}
+            <div className="grid grid-cols-3 gap-6 pt-8 border-t border-gray-200 dark:border-gray-800">
+              {[
+              { number: "15k+", label: t.stats.patients },
+              { number: "20+", label: t.stats.exp },
+              { number: "50+", label: t.stats.docs }
+            ].map((stat, i) => (
+              <div key={i}>
+                <div className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{stat.number}</div>
+                <div className="text-sm text-gray-500">{stat.label}</div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* 3D Canvas Container */}
+        <div className="h-[500px] md:h-[700px] w-full relative z-10">
+          <ThreeScene />
+        </div>
+      </div>
+    </section>
+
+    <section id="services" className="py-24 bg-white/50 dark:bg-gray-900/50 backdrop-blur-xl relative z-20">
+        <div className="container mx-auto px-4 md:px-8">
+          <div className="text-center mb-16 max-w-2xl mx-auto">
+            <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-4xl md:text-5xl font-bold font-['Plus_Jakarta_Sans'] mb-4 text-gray-900 dark:text-white">
+              {t.services.title}
+            </motion.h2>
+            <p className="text-gray-600 dark:text-gray-400 text-lg">{t.services.subtitle}</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {[
+              { icon: <HeartPulse size={40} strokeWidth={1.5}/>, title: 'Kardiologiya', desc: 'Yurak-qon tomir kasalliklarini diagnostika qilish va davolash.' },
+              { icon: <Brain size={40} strokeWidth={1.5}/>, title: 'Nevrologiya', desc: 'Asab tizimi kasalliklarini zamonaviy usulda tekshirish.' },
+              { icon: <Bone size={40} strokeWidth={1.5}/>, title: 'Stomatologiya', desc: 'Og\'iz bo\'shlig\'i sog\'lig\'ini tiklash va estetik xizmatlar.' },
+              { icon: <Baby size={40} strokeWidth={1.5}/>, title: 'Pediatriya', desc: 'Bolalar salomatligini saqlash va rivojlanishini nazorat qilish.' },
+              { icon: <Activity size={40} strokeWidth={1.5}/>, title: 'Diagnostika', desc: 'Yuqori aniqlikdagi laboratoriya va apparat tekshiruvlari.' },
+              { icon: <Stethoscope size={40} strokeWidth={1.5}/>, title: 'Terapiya', desc: 'Umumiy kasalliklarni aniqlash, davolash va profilaktikasi.' }
+            ].map((service, i) => (
+              <TiltCard key={i}>
+                <motion.div 
+                  initial={{ opacity: 0, y: 30 }} 
+                  whileInView={{ opacity: 1, y: 0 }} 
+                  viewport={{ once: true }} 
+                  transition={{ delay: i * 0.1 }}
+                  className="p-8 rounded-3xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-xl shadow-gray-200/50 dark:shadow-none hover:border-[#4CC9A6]/50 transition-colors group relative overflow-hidden"
+                >
+                  <div className="absolute -right-10 -top-10 w-32 h-32 bg-gradient-to-br from-[#0E7C86]/10 to-[#4CC9A6]/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500"></div>
+                  <div className="w-16 h-16 rounded-2xl bg-[#f0f9f8] dark:bg-gray-800 text-[#0E7C86] dark:text-[#4CC9A6] flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-sm relative z-10">
+                    {service.icon}
+                  </div>
+                  <h3 className="text-2xl font-bold mb-3 text-gray-900 dark:text-white relative z-10">{service.title}</h3>
+                  <p className="text-gray-600 dark:text-gray-400 relative z-10 leading-relaxed">{service.desc}</p>
+                </motion.div>
+              </TiltCard>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="contact" className="py-24 relative overflow-hidden">
+        {/* Parallax Background */}
+        <motion.div style={{ y: yBg }} className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?q=80&w=2053&auto=format&fit=crop')] bg-cover bg-center opacity-5 dark:opacity-10 pointer-events-none -z-10" />
+        
+        <div className="container mx-auto px-4 md:px-8">
+          <AppointmentForm t={t} isDark={isDark} />
+        </div>
+      </section>
+
+      <footer className="bg-gray-900 text-gray-300 py-16 border-t border-gray-800 relative z-20 rounded-t-[3rem] mt-12">
+        <div className="container mx-auto px-4 md:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
+            <div className="col-span-1 md:col-span-2">
+              <div className="flex items-center gap-2 mb-6 cursor-pointer">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0E7C86] to-[#4CC9A6] flex items-center justify-center text-white">
+                  <Activity size={24} />
+                </div>
+                <span className="text-3xl font-bold font-['Plus_Jakarta_Sans'] text-white tracking-tight">Med<span className="text-[#4CC9A6]">Clinic</span></span>
+              </div>
+              <p className="max-w-md opacity-70 leading-relaxed mb-6">
+                Zamonaviy tibbiyot va xalqaro standartlar asosida siz va oilangiz salomatligi uchun xizmat qilamiz. Bizning manzilga tashrif buyuring yoki onlayn yoziling.
+              </p>
+              <div className="flex gap-4">
+                <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center hover:bg-[#0E7C86] transition-colors cursor-pointer"><Globe size={18} /></div>
+                <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center hover:bg-[#0E7C86] transition-colors cursor-pointer"><Phone size={18} /></div>
+                <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center hover:bg-[#0E7C86] transition-colors cursor-pointer"><MapPin size={18} /></div>
+              </div>
+            </div>
+            
+            <div>
+              <h4 className="text-white font-bold mb-6 text-lg">Bo'limlar</h4>
+              <ul className="space-y-4 opacity-70">
+                <li><a href="#" className="hover:text-[#4CC9A6] transition-colors">Kardiologiya</a></li>
+                <li><a href="#" className="hover:text-[#4CC9A6] transition-colors">Stomatologiya</a></li>
+                <li><a href="#" className="hover:text-[#4CC9A6] transition-colors">Pediatriya</a></li>
+                <li><a href="#" className="hover:text-[#4CC9A6] transition-colors">Diagnostika</a></li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="text-white font-bold mb-6 text-lg">Aloqa</h4>
+              <ul className="space-y-4 opacity-70">
+                <li className="flex items-center gap-3"><MapPin size={18} className="text-[#4CC9A6]" /> Toshkent sh, Chilonzor tumani, 12-uy</li>
+                <li className="flex items-center gap-3"><Phone size={18} className="text-[#4CC9A6]" /> +998 71 123 45 67</li>
+                <li className="flex items-center gap-3"><Clock size={18} className="text-[#4CC9A6]" /> Du-Shan: 08:00 - 20:00</li>
+              </ul>
+            </div>
+          </div>
+          <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center opacity-50 text-sm">
+            <p>&copy; {new Date().getFullYear()} MedClinic. Barcha huquqlar himoyalangan.</p>
+            <div className="flex gap-4 mt-4 md:mt-0">
+              <a href="#">Maxfiylik siyosati</a>
+              <a href="#">Foydalanish shartlari</a>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
